@@ -68,7 +68,7 @@ enum chan_order{
     AILERON,
     ELEVATOR,
     RUDDER,
-    AUX1,  // (CH5)  led light, or 3 pos. rate on CX-10, H7, or inverted flight on H101
+    AUX1,  // (CH5)  led light, or 3 pos. rate on CX-10, H7, inverted flight on H101, take off/land for CX10D
     AUX2,  // (CH6)  flip control
     AUX3,  // (CH7)  still camera (snapshot)
     AUX4,  // (CH8)  video camera
@@ -106,6 +106,7 @@ enum {
     PROTO_FQ777124,     // FQ777-124 pocket drone
     PROTO_E010,         // EAchine E010, NiHui NH-010, JJRC H36 mini
     PROTO_BAYANG_SILVERWARE, // Bayang for Silverware with frsky telemetry
+    PROTO_CX10D,        // Cheerson CX10D
     PROTO_END
 };
 
@@ -211,6 +212,9 @@ void loop()
         case PROTO_FQ777124:
             timeout = process_FQ777124();
             break;
+        case PROTO_CX10D:
+            timeout = process_CX10D();
+            break;
     }
     // updates ppm values out of ISR
     update_ppm();
@@ -250,8 +254,10 @@ void selectProtocol()
     }
     
     // startup stick commands (protocol selection / renew transmitter ID)
-    
-    if(ppm[RUDDER] < PPM_MIN_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND) // rudder left + aileron left
+    if(ppm[RUDDER] < PPM_MIN_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND) // rudder left + aileron right
+        current_protocol = PROTO_CX10D; // Cheerson CX10D
+
+    else if(ppm[RUDDER] < PPM_MIN_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND) // rudder left + aileron left
         current_protocol = PROTO_BAYANG_SILVERWARE; // Bayang protocol for Silverware with frsky telemetry
         
     else if(ppm[RUDDER] < PPM_MIN_COMMAND)   // Rudder left
@@ -384,6 +390,9 @@ void init_protocol()
         case PROTO_FQ777124:
             FQ777124_init();
             FQ777124_bind();
+            break;
+        case PROTO_CX10D:
+            CX10D_init();
             break;
     }
 }
