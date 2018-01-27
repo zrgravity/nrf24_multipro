@@ -47,7 +47,7 @@ uint8_t cx10wd_getButtons()
     return command;
 }
 
-void send_packet(u8 bind)
+void cx10d_send_packet(u8 bind)
 {
     uint16_t aileron, elevator, throttle, rudder;
     if (bind) {
@@ -72,12 +72,11 @@ void send_packet(u8 bind)
         packet[6] = throttle >> 8;
         packet[7] = rudder & 0xff;
         packet[8] = rudder >> 8;
+        // buttons
+        packet[8] |= GET_FLAG(AUX2, 0x10); // flip
+        packet[9] = 0x02; // rate (0-2)
+        packet[10] = cx10wd_getButtons(); // auto land / take off management
     }
-
-    // buttons
-    packet[8] |= GET_FLAG(AUX2, 0x10); // flip
-    packet[9] = 0x02; // rate (0-2)
-    packet[10] = cx10wd_getButtons(); // auto land / take off management
 
     // Power on, TX mode, CRC enabled
     XN297_Configure(_BV(NRF24L01_00_EN_CRC) | _BV(NRF24L01_00_CRCO) | _BV(NRF24L01_00_PWR_UP));
@@ -153,12 +152,12 @@ uint32_t process_CX10D()
             digitalWrite(ledPin, HIGH);
         }
         else {
-            send_packet(1);
+            cx10d_send_packet(1);
             digitalWrite(ledPin, cx10d_bind_counter-- & 0x10);
         }
         break;
     case CX10D_DATA:
-        send_packet(0);
+        cx10d_send_packet(0);
         break;
     }
     return nextPacket;
