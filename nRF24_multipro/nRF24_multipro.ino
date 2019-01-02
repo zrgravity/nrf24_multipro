@@ -107,6 +107,7 @@ enum {
     PROTO_E010,         // EAchine E010, NiHui NH-010, JJRC H36 mini
     PROTO_BT_PPM,       // Bluetooth PPM values
     PROTO_BT_RC,        // Bluetooth RC Car app emulation
+    PROTO_BASIC_PPM,    // Basic PPM direct protocol
     PROTO_END
 };
 
@@ -206,6 +207,9 @@ void loop()
         case PROTO_BT_RC:
             timeout = process_BT();
             break;
+        case PROTO_BASIC_PPM:
+            timeout = process_basic_proto_tx();
+            break;
     }
     // updates ppm values out of ISR
     update_ppm();
@@ -264,6 +268,8 @@ void selectProtocol()
             // Elevator Center
             else
             {
+                current_protocol = PROTO_BASIC_PPM;
+                Serial.println(F("PROTO_BASIC_PPM"));
             }
 
         }
@@ -427,6 +433,9 @@ void init_protocol()
         case PROTO_BT_PPM:
         case PROTO_BT_RC:
             BT_init();
+            break;
+        case PROTO_BASIC_PPM:
+            basic_proto_tx_init();
             break;
     }
 }
