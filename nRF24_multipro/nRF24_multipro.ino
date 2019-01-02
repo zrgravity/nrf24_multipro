@@ -105,6 +105,8 @@ enum {
     PROTO_YD717,        // Cheerson CX-10 red (older version)/CX11/CX205/CX30, JXD389/390/391/393, SH6057/6043/6044/6046/6047, FY326Q7, WLToys v252 Pro/v343, XinXun X28/X30/X33/X39/X40
     PROTO_FQ777124,     // FQ777-124 pocket drone
     PROTO_E010,         // EAchine E010, NiHui NH-010, JJRC H36 mini
+    PROTO_BT_PPM,       // Bluetooth PPM values
+    PROTO_BT_RC,        // Bluetooth RC Car app emulation
     PROTO_END
 };
 
@@ -200,6 +202,10 @@ void loop()
         case PROTO_FQ777124:
             timeout = process_FQ777124();
             break;
+        case PROTO_BT_PPM:
+        case PROTO_BT_RC:
+            timeout = process_BT();
+            break;
     }
     // updates ppm values out of ISR
     update_ppm();
@@ -244,11 +250,15 @@ void selectProtocol()
             // Elevator Down
             if (ppm[ELEVATOR] < PPM_MIN_COMMAND)
             {
+                current_protocol = PROTO_BT_RC; // Bluetooth RC Car app emulation
+                Serial.println(F("BT Mode"));
             }
 
             // Elevator Up
             else if (ppm[ELEVATOR] > PPM_MAX_COMMAND)
             {
+                current_protocol = PROTO_BT_PPM; // Bluetooth PPM values
+                Serial.println(F("BT Mode"));
             }
 
             // Elevator Center
@@ -413,6 +423,10 @@ void init_protocol()
         case PROTO_FQ777124:
             FQ777124_init();
             FQ777124_bind();
+            break;
+        case PROTO_BT_PPM:
+        case PROTO_BT_RC:
+            BT_init();
             break;
     }
 }
