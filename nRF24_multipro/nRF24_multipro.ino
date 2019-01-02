@@ -233,16 +233,62 @@ void selectProtocol()
             count--;
         ppm_ok = false;
     }
-    
-    // startup stick commands
-    
-    if(ppm[RUDDER] < PPM_MIN_COMMAND)        // Rudder left
-        set_txid(true);                      // Renew Transmitter ID
-    
-    // protocol selection
-    
+    // protocol selection and startup stick commands
+
+    // Rudder left
+    if(ppm[RUDDER] < PPM_MIN_COMMAND)
+    {
+        // Aileron Right
+        if (ppm[AILERON] > PPM_MAX_COMMAND)
+        {
+            // Elevator Down
+            if (ppm[ELEVATOR] < PPM_MIN_COMMAND)
+            {
+            }
+
+            // Elevator Up
+            else if (ppm[ELEVATOR] > PPM_MAX_COMMAND)
+            {
+            }
+
+            // Elevator Center
+            else
+            {
+            }
+
+        }
+
+        // Aileron Left
+        else if (ppm[AILERON] < PPM_MIN_COMMAND)
+        {
+            // Elevator Down
+            if (ppm[ELEVATOR] < PPM_MIN_COMMAND)
+            {
+            }
+
+            // Elevator Up
+            else if (ppm[ELEVATOR] > PPM_MAX_COMMAND)
+            {
+            }
+
+            // Elevator Center
+            else
+            {
+                set_txid(true);                      // Renew Transmitter ID
+                Serial.println(F("Set new txid"));
+            }
+
+        }
+
+        // Aileron Center
+        else
+        {
+          // Add more protocols here
+        }
+    }
+
     // Rudder right + Aileron right + Elevator down
-    if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND && ppm[ELEVATOR] < PPM_MIN_COMMAND)
+    else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND && ppm[ELEVATOR] < PPM_MIN_COMMAND)
         current_protocol = PROTO_E010; // EAchine E010, NiHui NH-010, JJRC H36 mini
     
     // Rudder right + Aileron right + Elevator up
