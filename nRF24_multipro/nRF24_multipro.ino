@@ -1,36 +1,34 @@
-/*
- ##########################################
- #####   MultiProtocol nRF24L01 Tx   ######
- ##########################################
- #        by goebish on rcgroups          #
- #                                        #
- #   Parts of this project are derived    #
- #     from existing work, thanks to:     #
- #                                        #
- #   - PhracturedBlue for DeviationTX     #
- #   - victzh for XN297 emulation layer   #
- #   - Hasi for Arduino PPM decoder       #
- #   - hexfet, midelic, closedsink ...    #
- ##########################################
-
-
- This program is free software: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
-
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
-
- You should have received a copy of the GNU General Public License.
- If not, see <http://www.gnu.org/licenses/>.
- */
-
 #include <util/atomic.h>
 #include <EEPROM.h>
 #include "iface_nrf24l01.h"
+
+// ##########################################
+// #####   MultiProtocol nRF24L01 Tx   ######
+// ##########################################
+// #        by goebish on rcgroups          #
+// #                                        #
+// #   Parts of this project are derived    #
+// #     from existing work, thanks to:     #
+// #                                        #
+// #   - PhracturedBlue for DeviationTX     #
+// #   - victzh for XN297 emulation layer   #
+// #   - Hasi for Arduino PPM decoder       #
+// #   - hexfet, midelic, closedsink ...    #
+// ##########################################
+//
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License.
+// If not, see <http://www.gnu.org/licenses/>.
 
 
 // ############ Wiring ################
@@ -56,7 +54,7 @@
 // SPI input
 #define  MISO_on (PINC & _BV(0)) // PC0
 
-#define RF_POWER TX_POWER_80mW 
+#define RF_POWER TX_POWER_80mW
 
 // tune ppm input for "special" transmitters
 // #define SPEKTRUM // TAER, 1100-1900, AIL & RUD reversed
@@ -82,7 +80,7 @@ enum chan_order{
 };
 
 #define PPM_MIN 1000
-#define PPM_SAFE_THROTTLE 1050 
+#define PPM_SAFE_THROTTLE 1050
 #define PPM_MID 1500
 #define PPM_MAX 2000
 #define PPM_MIN_COMMAND 1300
@@ -111,6 +109,7 @@ enum {
     PROTO_BT_PPM,       // Bluetooth PPM values
     PROTO_BT_RC,        // Bluetooth RC Car app emulation
     PROTO_BASIC_PPM,    // Basic PPM direct protocol
+    PROTO_BAYANG_SILVERWARE, // Bayang for Silverware with frsky telemetry
     PROTO_END
 };
 
@@ -122,6 +121,13 @@ enum{
     ee_TXID2,
     ee_TXID3
 };
+
+struct {
+    uint16_t volt1;
+    uint16_t rssi;
+    uint8_t updated;
+    uint32_t lastUpdate;
+} telemetry_data;
 
 uint8_t transmitterID[4];
 uint8_t current_protocol;
@@ -144,6 +150,7 @@ void setup()
     pinMode(CS_pin, OUTPUT);
     pinMode(CE_pin, OUTPUT);
     pinMode(MISO_pin, INPUT);
+    frskyInit();
 
     // PPM ISR setup
     attachInterrupt(digitalPinToInterrupt(PPM_pin), ISR_ppm, CHANGE);
@@ -165,6 +172,7 @@ void loop()
         NRF24L01_Initialize();
         init_protocol();
     }
+    telemetry_data.updated = 0;
     // process protocol
     switch(current_protocol) {
         case PROTO_CG023:
@@ -182,6 +190,7 @@ void loop()
             timeout = process_H7();
             break;
         case PROTO_BAYANG:
+        case PROTO_BAYANG_SILVERWARE:
             timeout = process_Bayang();
             break;
         case PROTO_SYMAX5C1:
@@ -217,9 +226,13 @@ void loop()
     }
     // updates ppm values out of ISR
     update_ppm();
-    // wait before sending next packet
-    while(micros() < timeout)
-    {   };
+
+    while(micros() < timeout) {
+        if(telemetry_data.updated) {
+            frskyUpdate();
+        }
+    }
+    telemetry_data.updated = 0;
 }
 
 void set_txid(bool renew)
@@ -230,8 +243,8 @@ void set_txid(bool renew)
     if(renew || (transmitterID[0]==0xFF && transmitterID[1]==0x0FF)) {
         for(i=0; i<4; i++) {
             transmitterID[i] = random() & 0xFF;
-            EEPROM.update(ee_TXID0+i, transmitterID[i]); 
-        }            
+            EEPROM.update(ee_TXID0+i, transmitterID[i]);
+        }
     }
 }
 
@@ -293,6 +306,7 @@ void selectProtocol()
             // Elevator Up
             else if (ppm[ELEVATOR] > PPM_MAX_COMMAND)
             {
+                current_protocol = PROTO_BAYANG_SILVERWARE; // Bayang protocol for Silverware with frsky telemetry
             }
 
             // Elevator Center
@@ -311,10 +325,12 @@ void selectProtocol()
         }
     }
 
+    // startup stick commands (protocol selection / renew transmitter ID)
+
     // Rudder right + Aileron right + Elevator down
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND && ppm[ELEVATOR] < PPM_MIN_COMMAND)
         current_protocol = PROTO_E010; // EAchine E010, NiHui NH-010, JJRC H36 mini
-    
+
     // Rudder right + Aileron right + Elevator up
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND && ppm[ELEVATOR] > PPM_MAX_COMMAND)
         current_protocol = PROTO_FQ777124; // FQ-777-124
@@ -322,64 +338,64 @@ void selectProtocol()
     // Rudder right + Aileron left + Elevator up
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND && ppm[ELEVATOR] > PPM_MAX_COMMAND)
         current_protocol = PROTO_YD717; // Cheerson CX-10 red (older version)/CX11/CX205/CX30, JXD389/390/391/393, SH6057/6043/6044/6046/6047, FY326Q7, WLToys v252 Pro/v343, XinXun X28/X30/X33/X39/X40
-    
+
     // Rudder right + Aileron left + Elevator down
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND && ppm[ELEVATOR] < PPM_MIN_COMMAND)
         current_protocol = PROTO_KN; // KN (WLToys variant) V930/931/939/966/977/988
-    
+
     // Rudder right + Elevator down
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[ELEVATOR] < PPM_MIN_COMMAND)
         current_protocol = PROTO_HISKY; // HiSky RXs, HFP80, HCP80/100, FBL70/80/90/100, FF120, HMX120, WLToys v933/944/955 ...
-    
+
     // Rudder right + Elevator up
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[ELEVATOR] > PPM_MAX_COMMAND)
         current_protocol = PROTO_SYMAXOLD; // Syma X5C, X2 ...
-    
+
     // Rudder right + Aileron right
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND)
         current_protocol = PROTO_MJX; // MJX X600, other sub protocols can be set in code
-    
+
     // Rudder right + Aileron left
     else if(ppm[RUDDER] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND)
         current_protocol = PROTO_H8_3D; // H8 mini 3D, H20 ...
-    
+
     // Elevator down + Aileron right
     else if(ppm[ELEVATOR] < PPM_MIN_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND)
         current_protocol = PROTO_YD829; // YD-829, YD-829C, YD-822 ...
-    
+
     // Elevator down + Aileron left
     else if(ppm[ELEVATOR] < PPM_MIN_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND)
         current_protocol = PROTO_SYMAX5C1; // Syma X5C-1, X11, X11C, X12
-    
+
     // Elevator up + Aileron right
     else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] > PPM_MAX_COMMAND)
         current_protocol = PROTO_BAYANG;    // EAchine H8(C) mini, BayangToys X6/X7/X9, JJRC JJ850 ...
-    
+
     // Elevator up + Aileron left
-    else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND) 
+    else if(ppm[ELEVATOR] > PPM_MAX_COMMAND && ppm[AILERON] < PPM_MIN_COMMAND)
         current_protocol = PROTO_H7;        // EAchine H7, MT99xx
-    
-    // Elevator up  
+
+    // Elevator up
     else if(ppm[ELEVATOR] > PPM_MAX_COMMAND)
         current_protocol = PROTO_V2X2;       // WLToys V202/252/272, JXD 385/388, JJRC H6C ...
-        
+
     // Elevator down
-    else if(ppm[ELEVATOR] < PPM_MIN_COMMAND) 
+    else if(ppm[ELEVATOR] < PPM_MIN_COMMAND)
         current_protocol = PROTO_CG023;      // EAchine CG023/CG031/3D X4, (todo :ATTOP YD-836/YD-836C) ...
-    
+
     // Aileron right
-    else if(ppm[AILERON] > PPM_MAX_COMMAND)  
-        current_protocol = PROTO_CX10_BLUE;  // Cheerson CX10(blue pcb, newer red pcb)/CX10-A/CX11/CX12 ... 
-    
+    else if(ppm[AILERON] > PPM_MAX_COMMAND)
+        current_protocol = PROTO_CX10_BLUE;  // Cheerson CX10(blue pcb, newer red pcb)/CX10-A/CX11/CX12 ...
+
     // Aileron left
-    else if(ppm[AILERON] < PPM_MIN_COMMAND)  
-        current_protocol = PROTO_CX10_GREEN;  // Cheerson CX10(green pcb)... 
+    else if(ppm[AILERON] < PPM_MIN_COMMAND)
+        current_protocol = PROTO_CX10_GREEN;  // Cheerson CX10(green pcb)...
         Serial.println(F("CX10 Green selected"));
-    
+
     // read last used protocol from eeprom
-    else 
-        current_protocol = constrain(EEPROM.read(ee_PROTOCOL_ID),0,PROTO_END-1);      
-    // update eeprom 
+    else
+        current_protocol = constrain(EEPROM.read(ee_PROTOCOL_ID),0,PROTO_END-1);
+    // update eeprom
     EEPROM.update(ee_PROTOCOL_ID, current_protocol);
     Serial.println(F("Proto Selected"));
     // wait for safe throttle
@@ -412,6 +428,7 @@ void init_protocol()
             H7_bind();
             break;
         case PROTO_BAYANG:
+        case PROTO_BAYANG_SILVERWARE:
             Bayang_init();
             Bayang_bind();
             break;
@@ -451,7 +468,7 @@ void init_protocol()
     }
 }
 
-// update ppm values out of ISR    
+// update ppm values out of ISR
 void update_ppm()
 {
     for(uint8_t ch=0; ch<CHANNELS; ch++) {

@@ -2,7 +2,7 @@
 nRF24L01 multi-protocol RC transmitter
 
 ![Screenshot](http://i.imgur.com/AeMJKzT.jpg)  
-[Need a module ?](mailto://goebish@gmail.com)
+[Need a module ?](mailto:goebish@gmail.com?Subject=nrf24-multipro%20module)
 
 ## Binding Procedure
 - Create a model in OpenTX using external module in PPM mode, 12 channels and TAER sequence order.
@@ -12,8 +12,9 @@ nRF24L01 multi-protocol RC transmitter
 - Arm quad based on it's firmware's specification. 
 
 
-#####Protocol is selected with stick position at startup:
+#### Protocol is selected with stick position at startup:
 
+- Rudder left + Aileron left + Elevator Up = Bayang protocol with Silverware telemetry for OpenTX
 - Rudder right + Aileron right + Elevator down = EAchine E010, NiHui NH-010, JJRC H36 mini  
 - Rudder right + Aileron right + Elevator up = FQ-777-124 Pocket Drone  
 - Rudder right + Aileron left + Elevator up = CX-10 older red PCB/CX11/CX205/CX30, JXD389/391/393, SH6057/6043/6044/6046/6047, FY326Q7, WLToys v252 Pro/v343, XinXun X28/X30/X33/X39/X40   
@@ -33,7 +34,7 @@ nRF24L01 multi-protocol RC transmitter
 
 Last used protocol is automatically selected if stick is in neutral position.
 
-#####Extra features (if available on aircraft):
+#### Extra features (if available on aircraft):
 
 - Channel 5: led light, 3 pos. rate on CX-10 and FQ777-124, H7, inverted flight on H101  
 - Channel 6: flip control  
