@@ -34,9 +34,9 @@
 
 
 // ############ Wiring ################
-#define PPM_pin   2  // PPM in
+#define PPM_pin   3  // PPM in
 //SPI Comm.pins with nRF24L01
-#define MOSI_pin  3  // MOSI - D3
+#define MOSI_pin  6  // MOSI - D6
 #define SCK_pin   4  // SCK  - D4
 #define CE_pin    5  // CE   - D5
 #define MISO_pin  A0 // MISO - A0
@@ -45,8 +45,8 @@
 #define ledPin    13 // LED  - D13
 
 // SPI outputs
-#define MOSI_on PORTD |= _BV(3)  // PD3
-#define MOSI_off PORTD &= ~_BV(3)// PD3
+#define MOSI_on PORTD |= _BV(6)  // PD6
+#define MOSI_off PORTD &= ~_BV(6)// PD6
 #define SCK_on PORTD |= _BV(4)   // PD4
 #define SCK_off PORTD &= ~_BV(4) // PD4
 #define CE_on PORTD |= _BV(5)    // PD5
@@ -60,10 +60,29 @@
 
 // tune ppm input for "special" transmitters
 // #define SPEKTRUM // TAER, 1100-1900, AIL & RUD reversed
+#define FUTABA // AETR, 1100-1900, ELEV & THRO reversed
 
 // Print PPM values for testing
 //#define PRINT_PPM_VALUES
 
+#ifdef FUTABA
+// Futaba 7CAP
+#define CHANNELS 7 // number of channels in ppm stream, 12 ideally
+enum chan_order{
+    AILERON,
+    ELEVATOR,
+    THROTTLE,
+    RUDDER,
+    AUX1,  // (CH5)  led light, or 3 pos. rate on CX-10, H7, or inverted flight on H101
+    AUX2,  // (CH6)  VR Knob
+    AUX3,  // (CH7)  flip control
+    AUX4,  // (CH8)  video camera
+    AUX5,  // (CH9)  headless
+    AUX6,  // (CH10) calibrate Y (V2x2), pitch trim (H7), RTH (Bayang, H20), 360deg flip mode (H8-3D, H22)
+    AUX7,  // (CH11) calibrate X (V2x2), roll trim (H7)
+    AUX8,  // (CH12) Reset / Rebind
+};
+#else
 // PPM stream settings
 #define CHANNELS 12 // number of channels in ppm stream, 12 ideally
 enum chan_order{
@@ -80,15 +99,22 @@ enum chan_order{
     AUX7,  // (CH11) calibrate X (V2x2), roll trim (H7)
     AUX8,  // (CH12) Reset / Rebind
 };
+#endif
 
 #define PPM_MIN 1000
-#define PPM_SAFE_THROTTLE 1050 
+#define PPM_SAFE_THROTTLE 1200
 #define PPM_MID 1500
 #define PPM_MAX 2000
 #define PPM_MIN_COMMAND 1300
 #define PPM_MAX_COMMAND 1700
 #define GET_FLAG(ch, mask) (ppm[ch] > PPM_MAX_COMMAND ? mask : 0)
 #define GET_FLAG_INV(ch, mask) (ppm[ch] < PPM_MIN_COMMAND ? mask : 0)
+
+#define T1_CLK_PRESCALE     8
+// counts = us * (F_CPU/1000000) / T1_CLK_PRESCALE
+// us = counts * T1_CLK_PRESCALE / (F_CPU/1000000)
+#define PPM_PULSE_MIN   ( 510 * (F_CPU/1000000) / T1_CLK_PRESCALE )     // 510us min pulse
+#define PPM_PULSE_MAX   ( 1910 * (F_CPU/1000000) / T1_CLK_PRESCALE )    // 1910us max pulse (greater: sync)
 
 // supported protocols
 enum {
@@ -149,7 +175,7 @@ void setup()
     attachInterrupt(digitalPinToInterrupt(PPM_pin), ISR_ppm, CHANGE);
     TCCR1A = 0;  //reset timer1
     TCCR1B = 0;
-    TCCR1B |= (1 << CS11);  //set timer1 to increment every 1 us @ 8MHz, 0.5 us @16MHz
+    TCCR1B |= (1 << CS11);  //set timer1 to increment every 1 us @ 8MHz, 0.5 us @16MHz (clock/8)
 
     set_txid(false);
 }
@@ -454,10 +480,18 @@ void init_protocol()
 // update ppm values out of ISR    
 void update_ppm()
 {
-    for(uint8_t ch=0; ch<CHANNELS; ch++) {
-        ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    for(uint8_t ch=0; ch<CHANNELS; ch++)
+    {
+        ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+        {
             ppm[ch] = Servo_data[ch];
         }
+        // scale based on F_CPU, constrain
+        ppm[ch] = map(ppm[ch],  PPM_MIN * (F_CPU/1000000) / T1_CLK_PRESCALE, \
+                                PPM_MAX * (F_CPU/1000000) / T1_CLK_PRESCALE, \
+                                PPM_MIN, \
+                                PPM_MAX);
+//        ppm[ch] = constrain(timerCountsToMicroseconds(ppm[ch]), PPM_MIN, PPM_MAX);
     }
 #ifdef SPEKTRUM
     for(uint8_t ch=0; ch<CHANNELS; ch++) {
@@ -466,6 +500,16 @@ void update_ppm()
         }
         ppm[ch] = constrain(map(ppm[ch],1120,1880,PPM_MIN,PPM_MAX),PPM_MIN,PPM_MAX);
     }
+#endif
+#ifdef FUTABA
+   for(uint8_t ch=0; ch<CHANNELS; ch++)
+   {
+       if(ch == ELEVATOR || ch == THROTTLE)
+       {
+           ppm[ch] = 3000-ppm[ch];
+       }
+       // ppm[ch] = constrain(map(ppm[ch],1120,1880,PPM_MIN,PPM_MAX),PPM_MIN,PPM_MAX);
+   }
 #endif
 #ifdef PRINT_PPM_VALUES
     Serial.print("PPM Data: A:");
@@ -485,30 +529,30 @@ void update_ppm()
 #endif
 }
 
+unsigned long timerCountsToMicroseconds(unsigned long counts)
+{
+    // us = counts * 8 / (F_CPU/1E6)
+    uint32_t temp = (uint32_t)counts * T1_CLK_PRESCALE;
+    return (unsigned long)(temp / (F_CPU/1000000));
+}
+
 void ISR_ppm()
 {
-    #if F_CPU == 16000000
-        #define PPM_SCALE 1L
-    #elif F_CPU == 8000000
-        #define PPM_SCALE 0L
-    #else
-        #error // 8 or 16MHz only !
-    #endif
     static unsigned int pulse;
     static unsigned long counterPPM;
     static byte chan;
     counterPPM = TCNT1;
     TCNT1 = 0;
     ppm_ok=false;
-    if(counterPPM < 510 << PPM_SCALE) {  //must be a pulse if less than 510us
+    if(counterPPM < PPM_PULSE_MIN) {  //must be a pulse if less than 510us
         pulse = counterPPM;
     }
-    else if(counterPPM > 1910 << PPM_SCALE) {  //sync pulses over 1910us
+    else if(counterPPM > PPM_PULSE_MAX) {  //sync pulses over 1910us
         chan = 0;
     }
     else{  //servo values between 510us and 2420us will end up here
         if(chan < CHANNELS) {
-            Servo_data[chan]= constrain((counterPPM + pulse) >> PPM_SCALE, PPM_MIN, PPM_MAX);
+            Servo_data[chan] = (counterPPM + pulse);
             if(chan==3)
                 ppm_ok = true; // 4 first channels Ok
         }

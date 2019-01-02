@@ -148,8 +148,13 @@ void CX10_Write_Packet(uint8_t init)
     packet[10+offset]= highByte(ppm[THROTTLE]);
     packet[11+offset]= lowByte(ppm[RUDDER]);
     packet[12+offset]= highByte(ppm[RUDDER]);
+#ifdef FUTABA
+    if(ppm[AUX3] > PPM_MAX_COMMAND)
+        packet[12+offset] |= 0x10; // flip flag
+#else
     if(ppm[AUX2] > PPM_MAX_COMMAND)
         packet[12+offset] |= 0x10; // flip flag
+#endif
     // rate / mode
     if(ppm[AUX1] > PPM_MAX_COMMAND) // mode 3 / headless on CX-10A
         packet[13+offset] = 0x02;
