@@ -61,6 +61,9 @@
 // tune ppm input for "special" transmitters
 // #define SPEKTRUM // TAER, 1100-1900, AIL & RUD reversed
 
+// Print PPM values for testing
+//#define PRINT_PPM_VALUES
+
 // PPM stream settings
 #define CHANNELS 12 // number of channels in ppm stream, 12 ideally
 enum chan_order{
@@ -131,6 +134,7 @@ static uint16_t ppm[12] = {PPM_MIN,PPM_MIN,PPM_MIN,PPM_MIN,PPM_MID,PPM_MID,
 
 void setup()
 {
+    Serial.begin(9600);
     randomSeed((analogRead(A4) & 0x1F) | (analogRead(A5) << 5));
     pinMode(ledPin, OUTPUT);
     digitalWrite(ledPin, LOW); //start LED off
@@ -233,6 +237,7 @@ void set_txid(bool renew)
 
 void selectProtocol()
 {
+    Serial.println(F("selectProtocol()"));
     // wait for multiple complete ppm frames
     ppm_ok = false;
     uint8_t count = 10;
@@ -243,6 +248,9 @@ void selectProtocol()
             count--;
         ppm_ok = false;
     }
+    Serial.println(F("ppm_ok == true"));
+    digitalWrite(ledPin, HIGH);
+
     // protocol selection and startup stick commands
 
     // Rudder left
@@ -366,17 +374,20 @@ void selectProtocol()
     // Aileron left
     else if(ppm[AILERON] < PPM_MIN_COMMAND)  
         current_protocol = PROTO_CX10_GREEN;  // Cheerson CX10(green pcb)... 
+        Serial.println(F("CX10 Green selected"));
     
     // read last used protocol from eeprom
     else 
         current_protocol = constrain(EEPROM.read(ee_PROTOCOL_ID),0,PROTO_END-1);      
     // update eeprom 
     EEPROM.update(ee_PROTOCOL_ID, current_protocol);
+    Serial.println(F("Proto Selected"));
     // wait for safe throttle
     while(ppm[THROTTLE] > PPM_SAFE_THROTTLE) {
         delay(100);
         update_ppm();
     }
+    Serial.println(F("Throttle Safe"));
 }
 
 void init_protocol()
@@ -455,6 +466,22 @@ void update_ppm()
         }
         ppm[ch] = constrain(map(ppm[ch],1120,1880,PPM_MIN,PPM_MAX),PPM_MIN,PPM_MAX);
     }
+#endif
+#ifdef PRINT_PPM_VALUES
+    Serial.print("PPM Data: A:");
+    Serial.print(ppm[AILERON], DEC);
+    Serial.print(" E:");
+    Serial.print(ppm[ELEVATOR], DEC);
+    Serial.print(" T:");
+    Serial.print(ppm[THROTTLE], DEC);
+    Serial.print(" R:");
+    Serial.print(ppm[RUDDER], DEC);
+    Serial.print(" 5:");
+    Serial.print(ppm[AUX1], DEC);
+    Serial.print(" 6:");
+    Serial.print(ppm[AUX2], DEC);
+    Serial.print(" 7:");
+    Serial.println(ppm[AUX3], DEC);
 #endif
 }
 
