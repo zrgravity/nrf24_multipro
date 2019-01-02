@@ -22,7 +22,7 @@ Fixed length packet (2 * # channels)
 
  */
 
-#define CHANNELS 7 // number of channels in ppm stream, 12 ideally
+//#define CHANNELS 7 // number of channels in ppm stream, 12 ideally
 //enum chan_order{
 //    AILERON,
 //    ELEVATOR,
@@ -86,7 +86,7 @@ uint32_t process_basic_proto_tx(void)
     NRF24L01_FlushTx();
 
     basic_proto_tx_send_packet();
-    
+
     packet_count++;
     if (packet_count > 127)
         digitalWrite(ledPin, HIGH);

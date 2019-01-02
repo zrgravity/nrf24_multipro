@@ -157,3 +157,12 @@ uint8_t NRF24L01_SetBitrate(uint8_t bitrate)
     rf_setup = (rf_setup & 0xD7) | ((bitrate & 0x02) << 4) | ((bitrate & 0x01) << 3);
     return NRF24L01_WriteReg(NRF24L01_06_RF_SETUP, rf_setup);
 }
+
+static uint8_t NRF24L01_GetDynamicPayloadSize()
+{
+    CS_off;
+    spi_write(R_RX_PL_WID);
+    uint8_t len = spi_read();
+    CS_on;
+    return len;
+}

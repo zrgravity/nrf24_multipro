@@ -111,6 +111,7 @@ enum {
     PROTO_BT_PPM,       // Bluetooth PPM values
     PROTO_BT_RC,        // Bluetooth RC Car app emulation
     PROTO_BASIC_PPM,    // Basic PPM direct protocol
+    PROTO_CFLIE,        // Crazyflie CRTP protocol
     PROTO_END
 };
 
@@ -214,6 +215,9 @@ void loop()
         case PROTO_BASIC_PPM:
             timeout = process_basic_proto_tx();
             break;
+        case PROTO_CFLIE:
+            timeout = cflie_callback() + micros();
+            break;
     }
     // updates ppm values out of ISR
     update_ppm();
@@ -288,6 +292,8 @@ void selectProtocol()
             // Elevator Down
             if (ppm[ELEVATOR] < PPM_MIN_COMMAND)
             {
+                current_protocol = PROTO_CFLIE;
+                Serial.println(F("PROTO_CFLIE"));
             }
 
             // Elevator Up
@@ -373,8 +379,10 @@ void selectProtocol()
     
     // Aileron left
     else if(ppm[AILERON] < PPM_MIN_COMMAND)  
+    {
         current_protocol = PROTO_CX10_GREEN;  // Cheerson CX10(green pcb)... 
         Serial.println(F("CX10 Green selected"));
+    }
     
     // read last used protocol from eeprom
     else 
@@ -448,10 +456,13 @@ void init_protocol()
         case PROTO_BASIC_PPM:
             basic_proto_tx_init();
             break;
+        case PROTO_CFLIE:
+            cflie_init();
+            break;
     }
 }
 
-// update ppm values out of ISR    
+// update ppm values out of ISR
 void update_ppm()
 {
     for(uint8_t ch=0; ch<CHANNELS; ch++) {
